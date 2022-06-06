@@ -12,6 +12,7 @@ func main() {
     router.GET("/operations", controllers.FindOperations)
     router.GET("/operations/:id", controllers.FindOperation)
     router.POST("/operations", controllers.CreateOperation)
+    router.POST("/operations/:filetype", controllers.ImportOperation)
     router.PATCH("/operations/:id", controllers.UpdateOperation)
     router.DELETE("/operations/:id", controllers.DeleteOperation)
     router.Run()

@@ -1,11 +1,25 @@
 package controllers
 
 import (
+    "os"
+    "fmt"
+    "io"
     "time"
     "net/http"
     "github.com/gin-gonic/gin"
     "github.com/sandlayth/abyss/models"
 )
+
+var SupportedFileTypes = [1]string{"csv"}
+
+func isFileTypeSupported(f string) (bool) {
+    for _, v := range SupportedFileTypes {
+        if f == v {
+            return true
+        }
+    }
+    return false
+}
 
 type CreateOperationInput struct {
     Date          time.Time `json: "date" binding:"required"`
@@ -49,6 +63,52 @@ func CreateOperation(c *gin.Context) {
     operation := models.Operation{Date: input.Date, EffectiveDate: input.EffectiveDate, Label: input.Label, Amount: input.Amount}
     models.DB.Create(&operation)
     c.JSON(http.StatusOK, gin.H{"data": operation})
+}
+
+// POST /operations/:filetype
+func ImportOperation(c *gin.Context) {
+    if !isFileTypeSupported(c.Param("filetype")) {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "File type not supported!"})
+        return
+    }
+    fileHeader, err := c.FormFile("file")
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "File couldn't be imported!"})
+        return
+    }
+    file, err := fileHeader.Open()
+    if err != nil {
+         c.JSON(http.StatusBadRequest, gin.H{"error": "File couldn't be read!"})
+         return
+    }
+    defer file.Close()
+
+    var operations []models.Operation
+    buf := make([]byte, 1)
+    line := ""
+    for {
+        n, err := file.Read(buf)
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            fmt.Println(os.Stderr, err)
+            continue
+        }
+        char := string(buf[:n])
+        if char != "\n" {
+            line += char
+        } else {
+            operation, err := models.ParseOperation(line)
+            if err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+                return
+            }
+            operations = append(operations, operation)
+            line = ""
+        }
+    }
+    models.DB.Create(&operations)
 }
 
 // PATCH /operations/:id
